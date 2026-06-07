@@ -1,0 +1,25 @@
+{
+  "name": "tarrific-host-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot for hosting and security tools",
+  "main": "bot.js",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "nodemon bot.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "axios": "^1.7.2",
+    "sqlite3": "^5.1.7",
+    "playwright": "^1.45.0",
+    "adm-zip": "^0.5.14",
+    "whois": "^2.14.2",
+    "dns": "^0.2.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
