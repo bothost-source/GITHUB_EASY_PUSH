@@ -108,20 +108,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     if os.path.exists(welcome_video_path):
         try:
-            caption_text = "🎬 Welcome to TARRIFIC HOST!
+            caption_text = """Welcome to TARRIFIC HOST!
 
-"
-            caption_text += f"Hey {user.first_name or 'there'}! 👋
+Hey """ + str(user.first_name or 'there') + """!
 
-"
-            caption_text += "🚀 Host websites instantly
-"
-            caption_text += "🛡️ Use security tools
-"
-            caption_text += "📸 Capture screenshots
+Host websites instantly
+Use security tools
+Capture screenshots
 
-"
-            caption_text += "Choose an option below:"
+Choose an option below:"""
 
             await update.message.reply_video(
                 video=open(welcome_video_path, 'rb'),
@@ -129,25 +124,20 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
                 supports_streaming=True
             )
         except Exception as e:
-            logger.error(f"Failed to send welcome video: {e}")
-            welcome_text = f"👋 Welcome {user.first_name or 'there'}!
+            logger.error("Failed to send welcome video: " + str(e))
+            welcome_text = """Welcome """ + str(user.first_name or 'there') + """!
 
-"
-            welcome_text += "🚀 TARRIFIC HOST BOT
-"
-            welcome_text += "Host sites, use security tools, and more!"
+TARRIFIC HOST BOT
+Host sites, use security tools, and more!"""
             await update.message.reply_text(welcome_text)
     else:
         # No video file, send text welcome
-        welcome_text = f"👋 Welcome {user.first_name or 'there'}!
+        welcome_text = """Welcome """ + str(user.first_name or 'there') + """!
 
-"
-        welcome_text += "🚀 TARRIFIC HOST BOT
-"
-        welcome_text += "Host sites, use security tools, and more!
+TARRIFIC HOST BOT
+Host sites, use security tools, and more!
 
-"
-        welcome_text += "📹 Add a welcome.mp4 file to send a video greeting!"
+Add a welcome.mp4 file to send a video greeting!"""
         await update.message.reply_text(welcome_text)
 
     # Then send the main menu
