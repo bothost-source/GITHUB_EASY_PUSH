@@ -8,8 +8,7 @@
         "setup": {
           "nixPkgs": [
             "python311",
-            "chromium",
-            "playwright-chromium"
+            "chromium"
           ]
         }
       }
