@@ -110,7 +110,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         try:
             await update.message.reply_video(
                 video=open(welcome_video_path, 'rb'),
-                caption=f"🎬 Welcome to TARRIFIC HOST!
+                caption="🎬 Welcome to TARRIFIC HOST!
 
 "
                        f"Hey {user.first_name or 'there'}! 👋
