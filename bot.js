@@ -190,8 +190,7 @@ const buildProgress = (currentStep, totalSteps, percent, options = {}) => {
     }
 
     lines.push('└─────────────────────────────┘');
-    return lines.join('
-');
+    return lines.join('\n');
 };
 
 // Menu keyboards
