@@ -57,34 +57,34 @@ progress = ProgressBuilder()
 def get_main_menu_keyboard():
     """Main menu inline keyboard"""
     keyboard = [
-        [InlineKeyboardButton("🚀 Host New Site", callback_data="menu_host")],
-        [InlineKeyboardButton("📁 My Hosted Sites", callback_data="menu_sites")],
-        [InlineKeyboardButton("#️⃣ Hash Tools", callback_data="menu_hash")],
-        [InlineKeyboardButton("🔐 JWT Decoder", callback_data="menu_jwt")],
-        [InlineKeyboardButton("🔌 Port Scanner", callback_data="menu_scan")],
-        [InlineKeyboardButton("📡 Header Analyzer", callback_data="menu_headers")],
-        [InlineKeyboardButton("🌍 WHOIS & DNS", callback_data="menu_whois")],
-        [InlineKeyboardButton("📧 Breach Checker", callback_data="menu_breach")],
-        [InlineKeyboardButton("🔑 Password Generator", callback_data="menu_pass")],
-        [InlineKeyboardButton("🆔 Get My ID", callback_data="menu_getid")],
-        [InlineKeyboardButton("⚙️ Settings", callback_data="menu_settings")],
-        [InlineKeyboardButton("❓ Help", callback_data="menu_help")],
+        [InlineKeyboardButton(" Host New Site", callback_data="menu_host")],
+        [InlineKeyboardButton(" My Hosted Sites", callback_data="menu_sites")],
+        [InlineKeyboardButton("#⃣ Hash Tools", callback_data="menu_hash")],
+        [InlineKeyboardButton(" JWT Decoder", callback_data="menu_jwt")],
+        [InlineKeyboardButton(" Port Scanner", callback_data="menu_scan")],
+        [InlineKeyboardButton(" Header Analyzer", callback_data="menu_headers")],
+        [InlineKeyboardButton(" WHOIS & DNS", callback_data="menu_whois")],
+        [InlineKeyboardButton(" Breach Checker", callback_data="menu_breach")],
+        [InlineKeyboardButton(" Password Generator", callback_data="menu_pass")],
+        [InlineKeyboardButton(" Get My ID", callback_data="menu_getid")],
+        [InlineKeyboardButton(" Settings", callback_data="menu_settings")],
+        [InlineKeyboardButton(" Help", callback_data="menu_help")],
     ]
     return InlineKeyboardMarkup(keyboard)
 
 def get_back_button(callback_data="back_menu"):
     """Single back button"""
-    return InlineKeyboardMarkup([[InlineKeyboardButton("⬅️ Back", callback_data=callback_data)]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton(" Back", callback_data=callback_data)]])
 
 def get_cancel_button():
     """Cancel button for active operations"""
-    return InlineKeyboardMarkup([[InlineKeyboardButton("❌ Cancel", callback_data="cancel")]])
+    return InlineKeyboardMarkup([[InlineKeyboardButton(" Cancel", callback_data="cancel")]])
 
 def get_retry_back_buttons(retry_callback="retry", back_callback="back_menu"):
     """Retry and back buttons for errors"""
     keyboard = [
-        [InlineKeyboardButton("🔁 Retry", callback_data=retry_callback)],
-        [InlineKeyboardButton("⬅️ Back", callback_data=back_callback)],
+        [InlineKeyboardButton(" Retry", callback_data=retry_callback)],
+        [InlineKeyboardButton(" Back", callback_data=back_callback)],
     ]
     return InlineKeyboardMarkup(keyboard)
 
@@ -187,7 +187,7 @@ async def menu_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return STATE_MENU
     elif data == "cancel":
         await query.edit_message_text(
-            "❌ Operation cancelled.",
+            " Operation cancelled.",
             reply_markup=get_back_button()
         )
         return STATE_MENU
@@ -203,7 +203,7 @@ async def start_hosting(query, context) -> int:
 
     if not token:
         await query.edit_message_text(
-            "🔑 GitHub connection required!
+            " GitHub connection required!
 
 "
             "Please connect your GitHub account first:
@@ -222,7 +222,7 @@ async def start_hosting(query, context) -> int:
     site_count = db.count_user_sites(user_id)
     if site_count >= MAX_SITES_PER_USER:
         await query.edit_message_text(
-            f"⚠️ Maximum {MAX_SITES_PER_USER} sites reached!
+            f" Maximum {MAX_SITES_PER_USER} sites reached!
 
 "
             f"You currently have {site_count} sites.
@@ -233,13 +233,13 @@ async def start_hosting(query, context) -> int:
         return STATE_MENU
 
     await query.edit_message_text(
-        "🚀 HOST NEW SITE
+        " HOST NEW SITE
 
 "
         "Send me a ZIP file or HTML file to host.
 
 "
-        "📋 Requirements:
+        " Requirements:
 "
         "• ZIP must contain index.html at root
 "
@@ -260,7 +260,7 @@ async def handle_file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Check if document
     if not update.message.document:
         await update.message.reply_text(
-            "❌ Please send a file (ZIP or HTML).",
+            " Please send a file (ZIP or HTML).",
             reply_markup=get_back_button()
         )
         return STATE_UPLOAD
@@ -275,7 +275,7 @@ async def handle_file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if not (is_zip or is_html):
         await update.message.reply_text(
-            "❌ Only ZIP or HTML files accepted.",
+            " Only ZIP or HTML files accepted.",
             reply_markup=get_back_button()
         )
         return STATE_UPLOAD
@@ -283,7 +283,7 @@ async def handle_file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE)
     # Check size
     if file_size > 25 * 1024 * 1024:
         await update.message.reply_text(
-            f"❌ File too large: {file_size / (1024*1024):.1f} MB
+            f" File too large: {file_size / (1024*1024):.1f} MB
 "
             "Max: 25 MB",
             reply_markup=get_back_button()
@@ -322,9 +322,9 @@ async def handle_file_upload(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await progress_msg.edit_text(
                 progress.build_success(result['url']),
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🔁 Host Another", callback_data="menu_host")],
-                    [InlineKeyboardButton("📋 Copy URL", callback_data=f"copy_{result['url']}")],
-                    [InlineKeyboardButton("⬅️ Menu", callback_data="back_menu")]
+                    [InlineKeyboardButton(" Host Another", callback_data="menu_host")],
+                    [InlineKeyboardButton(" Copy URL", callback_data=f"copy_{result['url']}")],
+                    [InlineKeyboardButton(" Menu", callback_data="back_menu")]
                 ])
             )
         else:
@@ -486,33 +486,33 @@ async def show_sites(query, context) -> int:
 
     if not sites:
         await query.edit_message_text(
-            "📁 MY HOSTED SITES
+            " MY HOSTED SITES
 
 "
             "No sites hosted yet.
 "
-            "Use 🚀 Host New Site to get started!",
+            "Use  Host New Site to get started!",
             reply_markup=get_back_button()
         )
         return STATE_MENU
 
-    text = "📁 YOUR SITES
+    text = " YOUR SITES
 
 "
     keyboard = []
 
     for i, (repo_name, repo_url, site_url, file_count, total_size, created_at) in enumerate(sites, 1):
-        text += f"{i}. 🌐 {repo_name}
+        text += f"{i}.  {repo_name}
 "
-        text += f"   └─ {site_url}
+        text += f"    {site_url}
 "
-        text += f"   └─ {file_count} files, {total_size/1024:.1f} KB
+        text += f"    {file_count} files, {total_size/1024:.1f} KB
 
 "
 
-        keyboard.append([InlineKeyboardButton(f"🗑️ Delete {repo_name}", callback_data=f"del_{repo_name}")])
+        keyboard.append([InlineKeyboardButton(f" Delete {repo_name}", callback_data=f"del_{repo_name}")])
 
-    keyboard.append([InlineKeyboardButton("⬅️ Back", callback_data="back_menu")])
+    keyboard.append([InlineKeyboardButton(" Back", callback_data="back_menu")])
 
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
     return STATE_MENU
@@ -524,11 +524,11 @@ async def show_hash_menu(query, context) -> int:
     db.log_tool_usage(query.from_user.id, 'hash_menu')
 
     keyboard = [
-        [InlineKeyboardButton("1️⃣ Identify Hash", callback_data="hash_identify")],
-        [InlineKeyboardButton("2️⃣ Crack Hash", callback_data="hash_crack")],
-        [InlineKeyboardButton("3️⃣ Generate Hashes", callback_data="hash_generate")],
-        [InlineKeyboardButton("4️⃣ Base64 Encode/Decode", callback_data="hash_base64")],
-        [InlineKeyboardButton("⬅️ Back", callback_data="back_menu")],
+        [InlineKeyboardButton("1⃣ Identify Hash", callback_data="hash_identify")],
+        [InlineKeyboardButton("2⃣ Crack Hash", callback_data="hash_crack")],
+        [InlineKeyboardButton("3⃣ Generate Hashes", callback_data="hash_generate")],
+        [InlineKeyboardButton("4⃣ Base64 Encode/Decode", callback_data="hash_base64")],
+        [InlineKeyboardButton(" Back", callback_data="back_menu")],
     ]
 
     await query.edit_message_text(
@@ -546,7 +546,7 @@ async def hash_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 
     if data == "hash_identify":
         await query.edit_message_text(
-            "#️⃣ IDENTIFY HASH TYPE
+            "#⃣ IDENTIFY HASH TYPE
 
 "
             "Send me the hash string:
@@ -557,7 +557,7 @@ async def hash_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return STATE_HASH_IDENTIFY
     elif data == "hash_crack":
         await query.edit_message_text(
-            "#️⃣ CRACK HASH
+            "#⃣ CRACK HASH
 
 "
             "Send me the hash to crack:
@@ -568,7 +568,7 @@ async def hash_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return STATE_HASH_CRACK
     elif data == "hash_generate":
         await query.edit_message_text(
-            "#️⃣ GENERATE HASHES
+            "#⃣ GENERATE HASHES
 
 "
             "Send me the text to hash:
@@ -579,7 +579,7 @@ async def hash_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         return STATE_HASH_GENERATE
     elif data == "hash_base64":
         await query.edit_message_text(
-            "#️⃣ BASE64 ENCODE/DECODE
+            "#⃣ BASE64 ENCODE/DECODE
 
 "
             "Send me text to encode or Base64 to decode:",
@@ -598,7 +598,7 @@ async def start_jwt_decode(query, context) -> int:
     db.log_tool_usage(query.from_user.id, 'jwt_decode')
 
     await query.edit_message_text(
-        "🔐 JWT DECODER
+        " JWT DECODER
 
 "
         "Paste your JWT token:
@@ -620,7 +620,7 @@ async def start_port_scan(query, context) -> int:
     db.log_tool_usage(query.from_user.id, 'port_scan')
 
     await query.edit_message_text(
-        "🔌 PORT SCANNER
+        " PORT SCANNER
 
 "
         "Enter target IP or domain:
@@ -628,7 +628,7 @@ async def start_port_scan(query, context) -> int:
         "Example: example.com or 8.8.8.8
 
 "
-        "⚠️ Only scan targets you own or have permission to scan!",
+        " Only scan targets you own or have permission to scan!",
         reply_markup=get_cancel_button()
     )
     return STATE_SCAN_TARGET
@@ -640,7 +640,7 @@ async def start_header_analyzer(query, context) -> int:
     db.log_tool_usage(query.from_user.id, 'header_analyzer')
 
     await query.edit_message_text(
-        "📡 HEADER ANALYZER
+        " HEADER ANALYZER
 
 "
         "Enter URL to analyze:
@@ -666,10 +666,10 @@ async def show_whois_menu(query, context) -> int:
     db.log_tool_usage(query.from_user.id, 'whois_menu')
 
     keyboard = [
-        [InlineKeyboardButton("1️⃣ WHOIS Lookup", callback_data="whois_lookup")],
-        [InlineKeyboardButton("2️⃣ DNS Records", callback_data="dns_lookup")],
-        [InlineKeyboardButton("3️⃣ Subdomain Finder", callback_data="subdomain_find")],
-        [InlineKeyboardButton("⬅️ Back", callback_data="back_menu")],
+        [InlineKeyboardButton("1⃣ WHOIS Lookup", callback_data="whois_lookup")],
+        [InlineKeyboardButton("2⃣ DNS Records", callback_data="dns_lookup")],
+        [InlineKeyboardButton("3⃣ Subdomain Finder", callback_data="subdomain_find")],
+        [InlineKeyboardButton(" Back", callback_data="back_menu")],
     ]
 
     await query.edit_message_text(
@@ -687,7 +687,7 @@ async def whois_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if data == "whois_lookup":
         await query.edit_message_text(
-            "🌍 WHOIS LOOKUP
+            " WHOIS LOOKUP
 
 "
             "Enter domain:
@@ -698,7 +698,7 @@ async def whois_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return STATE_WHOIS_LOOKUP
     elif data == "dns_lookup":
         await query.edit_message_text(
-            "🌍 DNS RECORDS
+            " DNS RECORDS
 
 "
             "Enter domain:
@@ -709,7 +709,7 @@ async def whois_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return STATE_DNS_LOOKUP
     elif data == "subdomain_find":
         await query.edit_message_text(
-            "🌍 SUBDOMAIN FINDER
+            " SUBDOMAIN FINDER
 
 "
             "Enter domain:
@@ -730,7 +730,7 @@ async def start_breach_check(query, context) -> int:
     db.log_tool_usage(query.from_user.id, 'breach_check')
 
     await query.edit_message_text(
-        "📧 BREACH CHECKER
+        " BREACH CHECKER
 
 "
         "Enter email to check:
@@ -754,11 +754,11 @@ async def start_password_gen(query, context) -> int:
          InlineKeyboardButton("16 chars", callback_data="pass_16")],
         [InlineKeyboardButton("24 chars", callback_data="pass_24"),
          InlineKeyboardButton("32 chars", callback_data="pass_32")],
-        [InlineKeyboardButton("⬅️ Back", callback_data="back_menu")],
+        [InlineKeyboardButton(" Back", callback_data="back_menu")],
     ]
 
     await query.edit_message_text(
-        "🔑 PASSWORD GENERATOR
+        " PASSWORD GENERATOR
 
 "
         "Select length:",
@@ -778,16 +778,16 @@ async def pass_length_callback(update: Update, context: ContextTypes.DEFAULT_TYP
         context.user_data['pass_length'] = length
 
         keyboard = [
-            [InlineKeyboardButton("✓ Uppercase (A-Z)", callback_data="pass_opt_upper")],
-            [InlineKeyboardButton("✓ Lowercase (a-z)", callback_data="pass_opt_lower")],
-            [InlineKeyboardButton("✓ Numbers (0-9)", callback_data="pass_opt_numbers")],
-            [InlineKeyboardButton("✓ Symbols (!@#$)", callback_data="pass_opt_symbols")],
-            [InlineKeyboardButton("🎲 Generate", callback_data="pass_generate")],
-            [InlineKeyboardButton("⬅️ Back", callback_data="back_menu")],
+            [InlineKeyboardButton(" Uppercase (A-Z)", callback_data="pass_opt_upper")],
+            [InlineKeyboardButton(" Lowercase (a-z)", callback_data="pass_opt_lower")],
+            [InlineKeyboardButton(" Numbers (0-9)", callback_data="pass_opt_numbers")],
+            [InlineKeyboardButton(" Symbols (!@#$)", callback_data="pass_opt_symbols")],
+            [InlineKeyboardButton(" Generate", callback_data="pass_generate")],
+            [InlineKeyboardButton(" Back", callback_data="back_menu")],
         ]
 
         await query.edit_message_text(
-            f"🔑 OPTIONS ({length} chars)
+            f" OPTIONS ({length} chars)
 
 "
             "Toggle options then click Generate:",
@@ -810,7 +810,7 @@ async def show_user_id(query, context) -> int:
     user = query.from_user
 
     text = (
-        "🆔 YOUR TELEGRAM ID
+        " YOUR TELEGRAM ID
 
 "
         f"User ID: `{user.id}`
@@ -828,8 +828,8 @@ async def show_user_id(query, context) -> int:
     )
 
     keyboard = [
-        [InlineKeyboardButton("📋 Copy ID", callback_data=f"copy_id_{user.id}")],
-        [InlineKeyboardButton("⬅️ Back", callback_data="back_menu")],
+        [InlineKeyboardButton(" Copy ID", callback_data=f"copy_id_{user.id}")],
+        [InlineKeyboardButton(" Back", callback_data="back_menu")],
     ]
 
     await query.edit_message_text(
@@ -848,7 +848,7 @@ async def show_settings(query, context) -> int:
     site_count = db.count_user_sites(user_id)
     tool_count = db.get_today_tool_usage(user_id)
 
-    github_status = f"● Connected ({username})" if token else "○ Not connected"
+    github_status = f" Connected ({username})" if token else " Not connected"
 
     text = SETTINGS_MENU.format(
         github_status=github_status,
@@ -857,10 +857,10 @@ async def show_settings(query, context) -> int:
     )
 
     keyboard = [
-        [InlineKeyboardButton("🔑 Reconnect GitHub", callback_data="github_connect")],
-        [InlineKeyboardButton("📊 Usage Stats", callback_data="usage_stats")],
-        [InlineKeyboardButton("🗑️ Clear All Data", callback_data="clear_data")],
-        [InlineKeyboardButton("⬅️ Back", callback_data="back_menu")],
+        [InlineKeyboardButton(" Reconnect GitHub", callback_data="github_connect")],
+        [InlineKeyboardButton(" Usage Stats", callback_data="usage_stats")],
+        [InlineKeyboardButton(" Clear All Data", callback_data="clear_data")],
+        [InlineKeyboardButton(" Back", callback_data="back_menu")],
     ]
 
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard))
@@ -876,7 +876,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 
     if data == "github_connect":
         await query.edit_message_text(
-            "🔑 GITHUB CONNECTION
+            " GITHUB CONNECTION
 
 "
             "To connect your GitHub:
@@ -906,7 +906,7 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         total_sites = db.count_user_sites(user_id)
         today_tools = db.get_today_tool_usage(user_id)
         await query.edit_message_text(
-            f"📊 USAGE STATS
+            f" USAGE STATS
 
 "
             f"Total sites hosted: {total_sites}
@@ -920,10 +920,10 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return STATE_SETTINGS
     elif data == "clear_data":
         await query.edit_message_text(
-            "🗑️ CLEAR ALL DATA
+            " CLEAR ALL DATA
 
 "
-            "⚠️ This will delete:
+            " This will delete:
 "
             "• All hosted site records
 "
@@ -937,15 +937,15 @@ async def settings_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 "
             "Are you sure?",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✅ Yes, delete everything", callback_data="confirm_clear")],
-                [InlineKeyboardButton("❌ No, cancel", callback_data="back_settings")]
+                [InlineKeyboardButton(" Yes, delete everything", callback_data="confirm_clear")],
+                [InlineKeyboardButton(" No, cancel", callback_data="back_settings")]
             ])
         )
         return STATE_CONFIRM_CLEAR
     elif data == "confirm_clear":
         db.clear_user_data(user_id)
         await query.edit_message_text(
-            "✅ All data cleared!
+            " All data cleared!
 
 "
             "Your account has been reset.",
@@ -1010,7 +1010,7 @@ async def handle_text_input(update: Update, context: ContextTypes.DEFAULT_TYPE) 
         return await handle_github_token(update, context, text)
     else:
         await update.message.reply_text(
-            "❓ I didn't understand that.
+            " I didn't understand that.
 "
             "Use /start to see the menu.",
             reply_markup=get_back_button()
@@ -1026,7 +1026,7 @@ async def handle_hash_identify(update, context, text):
 
 async def handle_hash_crack(update, context, text):
     await update.message.reply_text(
-        "#️⃣ CRACKING...
+        "#⃣ CRACKING...
 
 "
         "This would attempt wordlist attack.
@@ -1098,7 +1098,7 @@ async def handle_github_token(update, context, text):
         # Store token (in real app, validate with GitHub API first)
         db.update_github_token(user_id, text, "user")
         await update.message.reply_text(
-            "✅ GitHub connected!
+            " GitHub connected!
 
 "
             "You can now host sites.",
@@ -1107,7 +1107,7 @@ async def handle_github_token(update, context, text):
         return STATE_SETTINGS
     else:
         await update.message.reply_text(
-            "❌ Invalid token format.
+            " Invalid token format.
 "
             "Should start with 'ghp_' or 'github_pat_'
 
@@ -1127,7 +1127,7 @@ async def start_vercel_deploy(query, context) -> int:
     db.log_tool_usage(query.from_user.id, 'vercel_deploy')
 
     await query.edit_message_text(
-        "🚀 DEPLOY TO VERCEL
+        " DEPLOY TO VERCEL
 
 "
         "Enter GitHub repository URL:
@@ -1191,29 +1191,29 @@ async def handle_vercel_url(update: Update, context: ContextTypes.DEFAULT_TYPE) 
                 # Send screenshot
                 await update.message.reply_photo(
                     photo=open(screenshot_result['path'], 'rb'),
-                    caption=f"✅ Deployed to Vercel!
+                    caption=f" Deployed to Vercel!
 
 "
-                           f"🌐 Site: {result['url']}
+                           f" Site: {result['url']}
 "
-                           f"📁 Project: {result['project_name']}
+                           f" Project: {result['project_name']}
 "
-                           f"🔍 Inspector: {result.get('inspector_url', 'N/A')}
+                           f" Inspector: {result.get('inspector_url', 'N/A')}
 
 "
                            f"Screenshot saved!"
                 )
             else:
                 await update.message.reply_text(
-                    f"✅ Deployed to Vercel!
+                    f" Deployed to Vercel!
 
 "
-                    f"🌐 Site: {result['url']}
+                    f" Site: {result['url']}
 "
-                    f"📁 Project: {result['project_name']}
+                    f" Project: {result['project_name']}
 
 "
-                    f"⚠️ Screenshot failed: {screenshot_result.get('error', 'Unknown error')}"
+                    f" Screenshot failed: {screenshot_result.get('error', 'Unknown error')}"
                 )
 
             await progress_msg.edit_text(
@@ -1238,7 +1238,7 @@ async def start_screenshot(query, context) -> int:
     db.log_tool_usage(query.from_user.id, 'screenshot')
 
     await query.edit_message_text(
-        "📸 CAPTURE SCREENSHOT
+        " CAPTURE SCREENSHOT
 
 "
         "Enter URL to screenshot:
@@ -1289,7 +1289,7 @@ async def handle_screenshot_url(update: Update, context: ContextTypes.DEFAULT_TY
             # Send screenshot
             await update.message.reply_photo(
                 photo=open(result['path'], 'rb'),
-                caption=f"📸 Screenshot captured!
+                caption=f" Screenshot captured!
 
 "
                        f"URL: {text}
@@ -1374,7 +1374,7 @@ def main():
     application.add_handler(hosting_conv)
 
     # Start bot
-    print("🤖 TARRIFIC HOST Bot started!")
+    print(" TARRIFIC HOST Bot started!")
     application.run_polling()
 
 if __name__ == "__main__":
