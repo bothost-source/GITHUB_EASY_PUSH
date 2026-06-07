@@ -91,7 +91,7 @@ def get_retry_back_buttons(retry_callback="retry", back_callback="back_menu"):
 # ============== START / MENU ==============
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Start command - show main menu"""
+    """Start command - send welcome video then show menu"""
     user = update.effective_user
 
     # Add/update user in database
@@ -103,6 +103,54 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         language=user.language_code or 'en'
     )
 
+    # Send welcome video first
+    welcome_video_path = os.getenv("WELCOME_VIDEO_PATH", "welcome.mp4")
+
+    if os.path.exists(welcome_video_path):
+        try:
+            await update.message.reply_video(
+                video=open(welcome_video_path, 'rb'),
+                caption=f"🎬 Welcome to TARRIFIC HOST!
+
+"
+                       f"Hey {user.first_name or 'there'}! 👋
+
+"
+                       f"🚀 Host websites instantly
+"
+                       f"🛡️ Use security tools
+"
+                       f"📸 Capture screenshots
+
+"
+                       f"Choose an option below:",
+                supports_streaming=True
+            )
+        except Exception as e:
+            logger.error(f"Failed to send welcome video: {e}")
+            await update.message.reply_text(
+                f"👋 Welcome {user.first_name or 'there'}!
+
+"
+                f"🚀 TARRIFIC HOST BOT
+"
+                f"Host sites, use security tools, and more!"
+            )
+    else:
+        # No video file, send text welcome
+        await update.message.reply_text(
+            f"👋 Welcome {user.first_name or 'there'}!
+
+"
+            f"🚀 TARRIFIC HOST BOT
+"
+            f"Host sites, use security tools, and more!
+
+"
+            f"📹 Add a welcome.mp4 file to send a video greeting!"
+        )
+
+    # Then send the main menu
     await update.message.reply_text(
         MAIN_MENU,
         reply_markup=get_main_menu_keyboard(),
