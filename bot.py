@@ -108,47 +108,47 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
     if os.path.exists(welcome_video_path):
         try:
+            caption_text = "🎬 Welcome to TARRIFIC HOST!
+
+"
+            caption_text += f"Hey {user.first_name or 'there'}! 👋
+
+"
+            caption_text += "🚀 Host websites instantly
+"
+            caption_text += "🛡️ Use security tools
+"
+            caption_text += "📸 Capture screenshots
+
+"
+            caption_text += "Choose an option below:"
+
             await update.message.reply_video(
                 video=open(welcome_video_path, 'rb'),
-                caption="🎬 Welcome to TARRIFIC HOST!
-
-"
-                       f"Hey {user.first_name or 'there'}! 👋
-
-"
-                       f"🚀 Host websites instantly
-"
-                       f"🛡️ Use security tools
-"
-                       f"📸 Capture screenshots
-
-"
-                       f"Choose an option below:",
+                caption=caption_text,
                 supports_streaming=True
             )
         except Exception as e:
             logger.error(f"Failed to send welcome video: {e}")
-            await update.message.reply_text(
-                f"👋 Welcome {user.first_name or 'there'}!
+            welcome_text = f"👋 Welcome {user.first_name or 'there'}!
 
 "
-                f"🚀 TARRIFIC HOST BOT
+            welcome_text += "🚀 TARRIFIC HOST BOT
 "
-                f"Host sites, use security tools, and more!"
-            )
+            welcome_text += "Host sites, use security tools, and more!"
+            await update.message.reply_text(welcome_text)
     else:
         # No video file, send text welcome
-        await update.message.reply_text(
-            f"👋 Welcome {user.first_name or 'there'}!
+        welcome_text = f"👋 Welcome {user.first_name or 'there'}!
 
 "
-            f"🚀 TARRIFIC HOST BOT
+        welcome_text += "🚀 TARRIFIC HOST BOT
 "
-            f"Host sites, use security tools, and more!
+        welcome_text += "Host sites, use security tools, and more!
 
 "
-            f"📹 Add a welcome.mp4 file to send a video greeting!"
-        )
+        welcome_text += "📹 Add a welcome.mp4 file to send a video greeting!"
+        await update.message.reply_text(welcome_text)
 
     # Then send the main menu
     await update.message.reply_text(
