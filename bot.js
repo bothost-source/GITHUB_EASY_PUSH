@@ -432,6 +432,184 @@ bot.action('pass_generate', async (ctx) => {
         KB([[btn('🎲 Generate Another', 'pass_generate')], [btn('◀ Back', 'menu_main')]]));
 });
 
+// ==================== COMMANDS ====================
+bot.command('help', async (ctx) => await ctx.reply(helpText(), back()));
+
+bot.command('getid', async (ctx) => {
+    const u = ctx.from;
+    await ctx.reply(`🆔 YOUR ID\n\n👤 ${u.id}\n📛 @${u.username || 'N/A'}\n📝 ${u.first_name || 'N/A'} ${u.last_name || ''}`,
+        KB([[btn('📋 Copy ID', `copy_id_${u.id}`)], [btn('◀ Back', 'menu_main')]]));
+});
+
+bot.command('sites', async (ctx) => {
+    const sites = await dbAll('SELECT repo_name, site_url, file_count, total_size FROM sites WHERE user_id = ? ORDER BY created_at DESC', [ctx.from.id]);
+    if (!sites.length) { await ctx.reply('📋 No sites yet. Use /host to start!', back()); return; }
+    let text = '📋 YOUR SITES\n\n';
+    sites.forEach((s, i) => text += `${i + 1}. 📁 ${s.repo_name}\n   🔗 ${s.site_url}\n   📊 ${s.file_count} files, ${(s.total_size / 1024).toFixed(1)} KB\n\n`);
+    await ctx.reply(text, back());
+});
+
+bot.command('cancel', async (ctx) => { ctx.session = {}; await ctx.reply('✅ Cancelled.', back()); });
+
+bot.command('host', async (ctx) => {
+    const user = await dbGet('SELECT github_token FROM users WHERE user_id = ?', [ctx.from.id]);
+    if (!user?.github_token) { 
+        await ctx.reply('⚠️ Connect YOUR GitHub first!\n\nUse /github YOUR_TOKEN or Settings → Connect GitHub', back('menu_settings')); 
+        return; 
+    }
+    const sites = await dbAll('SELECT * FROM sites WHERE user_id = ?', [ctx.from.id]);
+    if (sites.length >= MAX_SITES) { await ctx.reply(`❌ Max ${MAX_SITES} sites!`, back()); return; }
+    await ctx.reply('📤 Send ZIP or HTML file:\n\n✅ Using YOUR GitHub account', cancel()); 
+    ctx.session.step = 'host_upload';
+});
+
+bot.command('hash', async (ctx) => { 
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'hash_menu']); 
+    await ctx.reply(hashMenuText(), hashKB()); 
+});
+
+bot.command('jwt', async (ctx) => { 
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'jwt_decode']); 
+    await ctx.reply('🔑 Paste JWT token:', cancel()); 
+    ctx.session.step = 'jwt_decode'; 
+});
+
+bot.command('scan', async (ctx) => { 
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'port_scan']); 
+    await ctx.reply('📡 Enter target IP/domain:', cancel()); 
+    ctx.session.step = 'scan_target'; 
+});
+
+bot.command('headers', async (ctx) => { 
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'header_analyzer']); 
+    await ctx.reply('🔍 Enter URL:', cancel()); 
+    ctx.session.step = 'headers_url'; 
+});
+
+bot.command('whois', async (ctx) => { 
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'whois_menu']); 
+    await ctx.reply(whoisMenuText(), whoisKB()); 
+});
+
+bot.command('breach', async (ctx) => { 
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'breach_check']); 
+    await ctx.reply('📧 Enter email:', cancel()); 
+    ctx.session.step = 'breach_email'; 
+});
+
+bot.command('pass', async (ctx) => { 
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'password_gen']); 
+    await ctx.reply('🔒 Select length:', passKB()); 
+});
+
+bot.command('settings', async (ctx) => {
+    const user = await dbGet('SELECT github_token, github_username, vercel_token FROM users WHERE user_id = ?', [ctx.from.id]);
+    const sites = (await dbAll('SELECT * FROM sites WHERE user_id = ?', [ctx.from.id])).length;
+    const tools = (await dbAll("SELECT * FROM tool_usage WHERE user_id = ? AND date(used_at) = date('now')", [ctx.from.id])).length;
+    const gh = user?.github_token ? `✅ ${user.github_username}` : '❌ Not connected';
+    const vc = user?.vercel_token ? '✅ Connected' : isOwner(ctx.from.id) && OWNER_VERCEL_TOKEN ? '✅ Owner token' : '❌ Not connected';
+    await ctx.reply(`⚙️ SETTINGS\n\nGitHub: ${gh}\nVercel: ${vc}\nSites: ${sites}\nTools today: ${tools}\n\nUse buttons below:`,
+        KB([[btn('🔗 GitHub', 'github_connect'), btn('🔗 Vercel', 'vercel_connect')], [btn('📊 Stats', 'usage_stats'), btn('🗑️ Clear', 'clear_data')], [btn('◀ Back', 'menu_main')]]));
+});
+
+bot.command('github', async (ctx) => {
+    console.log('🔧 /github command triggered by', ctx.from.id);
+    const token = ctx.message.text.replace('/github', '').trim();
+    if (!token) { 
+        await ctx.reply('🔗 Usage: /github YOUR_TOKEN\n\nGet token at github.com/settings/tokens (repo scope)\n\n⚠️ Make sure your token has "repo" scope!'); 
+        return; 
+    }
+    // Validate token format
+    if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+        await ctx.reply('❌ Invalid token format.\n\nGitHub tokens start with:\n• ghp_ (classic)\n• github_pat_ (fine-grained)');
+        return;
+    }
+    const statusMsg = await ctx.reply('⏳ Verifying GitHub token...');
+    try {
+        const r = await axios.get('https://api.github.com/user', { 
+            headers: { 
+                Authorization: `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'TarrificHostBot/1.0'
+            }, 
+            timeout: 15000 
+        });
+        await dbRun('UPDATE users SET github_token = ?, github_username = ? WHERE user_id = ?', [token, r.data.login, ctx.from.id]);
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        await ctx.reply(`✅ GitHub connected!\n\n👤 Username: ${r.data.login}\n📧 Email: ${r.data.email || 'N/A'}\n🆔 ID: ${r.data.id}\n\nYou can now host sites!`, back('menu_settings'));
+        console.log(`✅ GitHub connected for user ${ctx.from.id}: ${r.data.login}`);
+    } catch (e) { 
+        console.error('GitHub auth error:', e.response?.data || e.message);
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        let errorMsg = e.response?.data?.message || e.message;
+        if (e.response?.status === 401) errorMsg = 'Token is invalid or expired';
+        if (e.response?.status === 403) errorMsg = 'Token lacks required permissions (need "repo" scope)';
+        await ctx.reply(`❌ GitHub Error: ${errorMsg}\n\n🔧 Troubleshooting:\n1. Check token at github.com/settings/tokens\n2. Ensure "repo" scope is enabled\n3. Generate a new token if expired`, back('menu_settings')); 
+    }
+});
+
+bot.command('vercel', async (ctx) => {
+    console.log('🔧 /vercel command triggered by', ctx.from.id);
+    const token = ctx.message.text.replace('/vercel', '').trim();
+    if (!token) { 
+        await ctx.reply('🔗 Usage: /vercel YOUR_TOKEN\n\nGet token at vercel.com/account/tokens'); 
+        return; 
+    }
+    const statusMsg = await ctx.reply('⏳ Verifying Vercel token...');
+    try {
+        const r = await axios.get('https://api.vercel.com/v2/user', { 
+            headers: { Authorization: `Bearer ${token}` }, 
+            timeout: 15000 
+        });
+        await dbRun('UPDATE users SET vercel_token = ? WHERE user_id = ?', [token, ctx.from.id]);
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        await ctx.reply(`✅ Vercel connected!\n\n👤 ${r.data.user?.email || 'Connected'}`, back('menu_settings'));
+        console.log(`✅ Vercel connected for user ${ctx.from.id}`);
+    } catch (e) { 
+        console.error('Vercel auth error:', e.response?.data || e.message);
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        await ctx.reply(`❌ Vercel Error: ${e.response?.data?.error?.message || e.message}\n\n🔧 Get your token at:\nvercel.com/account/tokens`, back('menu_settings')); 
+    }
+});
+
+bot.command('delete', async (ctx) => {
+    const repo = ctx.message.text.replace('/delete', '').trim();
+    if (!repo) { await ctx.reply('Usage: /delete <repo_name>'); return; }
+    await dbRun('DELETE FROM sites WHERE user_id = ? AND repo_name = ?', [ctx.from.id, repo]);
+    await ctx.reply(`🗑️ Deleted ${repo}`, back('menu_sites'));
+});
+
+// ==================== OWNER COMMANDS ====================
+bot.command('broadcast', async (ctx) => {
+    if (!isOwner(ctx.from.id)) { await ctx.reply('❌ Owner only!'); return; }
+    const msg = ctx.message.text.replace('/broadcast', '').trim();
+    if (!msg) { await ctx.reply('👑 Usage: /broadcast Your message'); return; }
+    const users = await dbAll('SELECT DISTINCT user_id FROM users');
+    let sent = 0, failed = 0;
+    await ctx.reply(`📢 Broadcasting to ${users.length} users...`);
+    for (const u of users) {
+        try { await ctx.telegram.sendMessage(u.user_id, `📢 ADMIN BROADCAST\n\n${msg}`); sent++; } catch (e) { failed++; }
+        await new Promise(r => setTimeout(r, 100));
+    }
+    await ctx.reply(`✅ Done! Sent: ${sent}, Failed: ${failed}, Total: ${users.length}`);
+});
+
+bot.command('stats', async (ctx) => {
+    if (!isOwner(ctx.from.id)) { await ctx.reply('❌ Owner only!'); return; }
+    const users = (await dbAll('SELECT COUNT(DISTINCT user_id) as c FROM users'))[0].c;
+    const sites = (await dbAll('SELECT COUNT(*) as c FROM sites'))[0].c;
+    const today = (await dbAll("SELECT COUNT(DISTINCT user_id) as c FROM users WHERE date(last_active) = date('now')"))[0].c;
+    await ctx.reply(`📊 BOT STATS\n\n👥 Total users: ${users}\n📁 Total sites: ${sites}\n📅 Active today: ${today}\n\nYour ID: ${ctx.from.id}\n👑 Owner: ${isOwner(ctx.from.id) ? 'Yes' : 'No'}`);
+});
+
+bot.command('users', async (ctx) => {
+    if (!isOwner(ctx.from.id)) { await ctx.reply('❌ Owner only!'); return; }
+    const users = await dbAll('SELECT user_id, username, first_name, last_active FROM users ORDER BY last_active DESC LIMIT 20');
+    let text = '👥 USERS (Last 20)\n\n';
+    users.forEach((u, i) => text += `${i + 1}. ${u.first_name || 'Unknown'} (@${u.username || 'N/A'})\n   ID: ${u.user_id} | Active: ${u.last_active}\n\n`);
+    await ctx.reply(text);
+});
+
 // ==================== TEXT INPUT HANDLER ====================
 bot.on('text', async (ctx) => {
     const step = ctx.session?.step;
@@ -792,184 +970,6 @@ bot.on('document', async (ctx) => {
     }
 });
 
-// ==================== COMMANDS ====================
-bot.command('help', async (ctx) => await ctx.reply(helpText(), back()));
-
-bot.command('getid', async (ctx) => {
-    const u = ctx.from;
-    await ctx.reply(`🆔 YOUR ID\n\n👤 ${u.id}\n📛 @${u.username || 'N/A'}\n📝 ${u.first_name || 'N/A'} ${u.last_name || ''}`,
-        KB([[btn('📋 Copy ID', `copy_id_${u.id}`)], [btn('◀ Back', 'menu_main')]]));
-});
-
-bot.command('sites', async (ctx) => {
-    const sites = await dbAll('SELECT repo_name, site_url, file_count, total_size FROM sites WHERE user_id = ? ORDER BY created_at DESC', [ctx.from.id]);
-    if (!sites.length) { await ctx.reply('📋 No sites yet. Use /host to start!', back()); return; }
-    let text = '📋 YOUR SITES\n\n';
-    sites.forEach((s, i) => text += `${i + 1}. 📁 ${s.repo_name}\n   🔗 ${s.site_url}\n   📊 ${s.file_count} files, ${(s.total_size / 1024).toFixed(1)} KB\n\n`);
-    await ctx.reply(text, back());
-});
-
-bot.command('cancel', async (ctx) => { ctx.session = {}; await ctx.reply('✅ Cancelled.', back()); });
-
-bot.command('host', async (ctx) => {
-    const user = await dbGet('SELECT github_token FROM users WHERE user_id = ?', [ctx.from.id]);
-    if (!user?.github_token) { 
-        await ctx.reply('⚠️ Connect YOUR GitHub first!\n\nUse /github YOUR_TOKEN or Settings → Connect GitHub', back('menu_settings')); 
-        return; 
-    }
-    const sites = await dbAll('SELECT * FROM sites WHERE user_id = ?', [ctx.from.id]);
-    if (sites.length >= MAX_SITES) { await ctx.reply(`❌ Max ${MAX_SITES} sites!`, back()); return; }
-    await ctx.reply('📤 Send ZIP or HTML file:\n\n✅ Using YOUR GitHub account', cancel()); 
-    ctx.session.step = 'host_upload';
-});
-
-bot.command('hash', async (ctx) => { 
-    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'hash_menu']); 
-    await ctx.reply(hashMenuText(), hashKB()); 
-});
-
-bot.command('jwt', async (ctx) => { 
-    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'jwt_decode']); 
-    await ctx.reply('🔑 Paste JWT token:', cancel()); 
-    ctx.session.step = 'jwt_decode'; 
-});
-
-bot.command('scan', async (ctx) => { 
-    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'port_scan']); 
-    await ctx.reply('📡 Enter target IP/domain:', cancel()); 
-    ctx.session.step = 'scan_target'; 
-});
-
-bot.command('headers', async (ctx) => { 
-    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'header_analyzer']); 
-    await ctx.reply('🔍 Enter URL:', cancel()); 
-    ctx.session.step = 'headers_url'; 
-});
-
-bot.command('whois', async (ctx) => { 
-    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'whois_menu']); 
-    await ctx.reply(whoisMenuText(), whoisKB()); 
-});
-
-bot.command('breach', async (ctx) => { 
-    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'breach_check']); 
-    await ctx.reply('📧 Enter email:', cancel()); 
-    ctx.session.step = 'breach_email'; 
-});
-
-bot.command('pass', async (ctx) => { 
-    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'password_gen']); 
-    await ctx.reply('🔒 Select length:', passKB()); 
-});
-
-bot.command('settings', async (ctx) => {
-    const user = await dbGet('SELECT github_token, github_username, vercel_token FROM users WHERE user_id = ?', [ctx.from.id]);
-    const sites = (await dbAll('SELECT * FROM sites WHERE user_id = ?', [ctx.from.id])).length;
-    const tools = (await dbAll("SELECT * FROM tool_usage WHERE user_id = ? AND date(used_at) = date('now')", [ctx.from.id])).length;
-    const gh = user?.github_token ? `✅ ${user.github_username}` : '❌ Not connected';
-    const vc = user?.vercel_token ? '✅ Connected' : isOwner(ctx.from.id) && OWNER_VERCEL_TOKEN ? '✅ Owner token' : '❌ Not connected';
-    await ctx.reply(`⚙️ SETTINGS\n\nGitHub: ${gh}\nVercel: ${vc}\nSites: ${sites}\nTools today: ${tools}\n\nUse buttons below:`,
-        KB([[btn('🔗 GitHub', 'github_connect'), btn('🔗 Vercel', 'vercel_connect')], [btn('📊 Stats', 'usage_stats'), btn('🗑️ Clear', 'clear_data')], [btn('◀ Back', 'menu_main')]]));
-});
-
-bot.command('github', async (ctx) => {
-    console.log('🔧 /github command triggered by', ctx.from.id);
-    const token = ctx.message.text.replace('/github', '').trim();
-    if (!token) { 
-        await ctx.reply('🔗 Usage: /github YOUR_TOKEN\n\nGet token at github.com/settings/tokens (repo scope)\n\n⚠️ Make sure your token has "repo" scope!'); 
-        return; 
-    }
-    // Validate token format
-    if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
-        await ctx.reply('❌ Invalid token format.\n\nGitHub tokens start with:\n• ghp_ (classic)\n• github_pat_ (fine-grained)');
-        return;
-    }
-    const statusMsg = await ctx.reply('⏳ Verifying GitHub token...');
-    try {
-        const r = await axios.get('https://api.github.com/user', { 
-            headers: { 
-                Authorization: `Bearer ${token}`,
-                'Accept': 'application/vnd.github.v3+json',
-                'User-Agent': 'TarrificHostBot/1.0'
-            }, 
-            timeout: 15000 
-        });
-        await dbRun('UPDATE users SET github_token = ?, github_username = ? WHERE user_id = ?', [token, r.data.login, ctx.from.id]);
-        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
-        await ctx.reply(`✅ GitHub connected!\n\n👤 Username: ${r.data.login}\n📧 Email: ${r.data.email || 'N/A'}\n🆔 ID: ${r.data.id}\n\nYou can now host sites!`, back('menu_settings'));
-        console.log(`✅ GitHub connected for user ${ctx.from.id}: ${r.data.login}`);
-    } catch (e) { 
-        console.error('GitHub auth error:', e.response?.data || e.message);
-        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
-        let errorMsg = e.response?.data?.message || e.message;
-        if (e.response?.status === 401) errorMsg = 'Token is invalid or expired';
-        if (e.response?.status === 403) errorMsg = 'Token lacks required permissions (need "repo" scope)';
-        await ctx.reply(`❌ GitHub Error: ${errorMsg}\n\n🔧 Troubleshooting:\n1. Check token at github.com/settings/tokens\n2. Ensure "repo" scope is enabled\n3. Generate a new token if expired`, back('menu_settings')); 
-    }
-});
-
-bot.command('vercel', async (ctx) => {
-    console.log('🔧 /vercel command triggered by', ctx.from.id);
-    const token = ctx.message.text.replace('/vercel', '').trim();
-    if (!token) { 
-        await ctx.reply('🔗 Usage: /vercel YOUR_TOKEN\n\nGet token at vercel.com/account/tokens'); 
-        return; 
-    }
-    const statusMsg = await ctx.reply('⏳ Verifying Vercel token...');
-    try {
-        const r = await axios.get('https://api.vercel.com/v2/user', { 
-            headers: { Authorization: `Bearer ${token}` }, 
-            timeout: 15000 
-        });
-        await dbRun('UPDATE users SET vercel_token = ? WHERE user_id = ?', [token, ctx.from.id]);
-        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
-        await ctx.reply(`✅ Vercel connected!\n\n👤 ${r.data.user?.email || 'Connected'}`, back('menu_settings'));
-        console.log(`✅ Vercel connected for user ${ctx.from.id}`);
-    } catch (e) { 
-        console.error('Vercel auth error:', e.response?.data || e.message);
-        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
-        await ctx.reply(`❌ Vercel Error: ${e.response?.data?.error?.message || e.message}\n\n🔧 Get your token at:\nvercel.com/account/tokens`, back('menu_settings')); 
-    }
-});
-
-bot.command('delete', async (ctx) => {
-    const repo = ctx.message.text.replace('/delete', '').trim();
-    if (!repo) { await ctx.reply('Usage: /delete <repo_name>'); return; }
-    await dbRun('DELETE FROM sites WHERE user_id = ? AND repo_name = ?', [ctx.from.id, repo]);
-    await ctx.reply(`🗑️ Deleted ${repo}`, back('menu_sites'));
-});
-
-// ==================== OWNER COMMANDS ====================
-bot.command('broadcast', async (ctx) => {
-    if (!isOwner(ctx.from.id)) { await ctx.reply('❌ Owner only!'); return; }
-    const msg = ctx.message.text.replace('/broadcast', '').trim();
-    if (!msg) { await ctx.reply('👑 Usage: /broadcast Your message'); return; }
-    const users = await dbAll('SELECT DISTINCT user_id FROM users');
-    let sent = 0, failed = 0;
-    await ctx.reply(`📢 Broadcasting to ${users.length} users...`);
-    for (const u of users) {
-        try { await ctx.telegram.sendMessage(u.user_id, `📢 ADMIN BROADCAST\n\n${msg}`); sent++; } catch (e) { failed++; }
-        await new Promise(r => setTimeout(r, 100));
-    }
-    await ctx.reply(`✅ Done! Sent: ${sent}, Failed: ${failed}, Total: ${users.length}`);
-});
-
-bot.command('stats', async (ctx) => {
-    if (!isOwner(ctx.from.id)) { await ctx.reply('❌ Owner only!'); return; }
-    const users = (await dbAll('SELECT COUNT(DISTINCT user_id) as c FROM users'))[0].c;
-    const sites = (await dbAll('SELECT COUNT(*) as c FROM sites'))[0].c;
-    const today = (await dbAll("SELECT COUNT(DISTINCT user_id) as c FROM users WHERE date(last_active) = date('now')"))[0].c;
-    await ctx.reply(`📊 BOT STATS\n\n👥 Total users: ${users}\n📁 Total sites: ${sites}\n📅 Active today: ${today}\n\nYour ID: ${ctx.from.id}\n👑 Owner: ${isOwner(ctx.from.id) ? 'Yes' : 'No'}`);
-});
-
-bot.command('users', async (ctx) => {
-    if (!isOwner(ctx.from.id)) { await ctx.reply('❌ Owner only!'); return; }
-    const users = await dbAll('SELECT user_id, username, first_name, last_active FROM users ORDER BY last_active DESC LIMIT 20');
-    let text = '👥 USERS (Last 20)\n\n';
-    users.forEach((u, i) => text += `${i + 1}. ${u.first_name || 'Unknown'} (@${u.username || 'N/A'})\n   ID: ${u.user_id} | Active: ${u.last_active}\n\n`);
-    await ctx.reply(text);
-});
-
 // ==================== LAUNCH ====================
 // Global error handler
 bot.catch((err, ctx) => {
@@ -977,6 +977,8 @@ bot.catch((err, ctx) => {
     ctx.reply('⚠️ An error occurred. Please try again or use /cancel.').catch(() => {});
 });
 
+// ==================== LAUNCH ====================
+// Start bot in polling mode (works everywhere)
 bot.launch().then(() => {
     console.log('✅ TARRIFIC HOST Bot started!');
     console.log('📊 Environment check:');
