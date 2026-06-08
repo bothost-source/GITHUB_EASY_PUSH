@@ -14,7 +14,8 @@
     "playwright": "^1.45.0",
     "adm-zip": "^0.5.14",
     "whois": "^2.14.2",
-    "dns": "^0.2.2"
+    "dns": "^0.2.2",
+    "puppeteer": "^21.0.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"
