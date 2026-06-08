@@ -21,6 +21,16 @@ if (!BOT_TOKEN) {
 }
 
 const bot = new Telegraf(BOT_TOKEN);
+
+// DEBUG: Log all incoming updates
+bot.use((ctx, next) => {
+    const updateType = ctx.updateType || 'unknown';
+    const text = ctx.message?.text || ctx.callbackQuery?.data || 'N/A';
+    const userId = ctx.from?.id || 'N/A';
+    console.log(`[${new Date().toISOString()}] 📩 ${updateType} from ${userId}: ${text}`);
+    return next();
+});
+
 bot.use(session({ defaultSession: () => ({}) }));
 
 if (!fs.existsSync('screenshots')) fs.mkdirSync('screenshots', { recursive: true });
@@ -863,32 +873,62 @@ bot.command('settings', async (ctx) => {
 });
 
 bot.command('github', async (ctx) => {
+    console.log('🔧 /github command triggered by', ctx.from.id);
     const token = ctx.message.text.replace('/github', '').trim();
     if (!token) { 
-        await ctx.reply('🔗 Usage: /github YOUR_TOKEN\n\nGet token at github.com/settings/tokens (repo scope)'); 
+        await ctx.reply('🔗 Usage: /github YOUR_TOKEN\n\nGet token at github.com/settings/tokens (repo scope)\n\n⚠️ Make sure your token has "repo" scope!'); 
         return; 
     }
+    // Validate token format
+    if (!token.startsWith('ghp_') && !token.startsWith('github_pat_')) {
+        await ctx.reply('❌ Invalid token format.\n\nGitHub tokens start with:\n• ghp_ (classic)\n• github_pat_ (fine-grained)');
+        return;
+    }
+    const statusMsg = await ctx.reply('⏳ Verifying GitHub token...');
     try {
-        const r = await axios.get('https://api.github.com/user', { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 });
+        const r = await axios.get('https://api.github.com/user', { 
+            headers: { 
+                Authorization: `Bearer ${token}`,
+                'Accept': 'application/vnd.github.v3+json',
+                'User-Agent': 'TarrificHostBot/1.0'
+            }, 
+            timeout: 15000 
+        });
         await dbRun('UPDATE users SET github_token = ?, github_username = ? WHERE user_id = ?', [token, r.data.login, ctx.from.id]);
-        await ctx.reply(`✅ GitHub connected!\n\n👤 ${r.data.login}`, back('menu_settings'));
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        await ctx.reply(`✅ GitHub connected!\n\n👤 Username: ${r.data.login}\n📧 Email: ${r.data.email || 'N/A'}\n🆔 ID: ${r.data.id}\n\nYou can now host sites!`, back('menu_settings'));
+        console.log(`✅ GitHub connected for user ${ctx.from.id}: ${r.data.login}`);
     } catch (e) { 
-        await ctx.reply(`❌ Invalid token: ${e.message}`, back('menu_settings')); 
+        console.error('GitHub auth error:', e.response?.data || e.message);
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        let errorMsg = e.response?.data?.message || e.message;
+        if (e.response?.status === 401) errorMsg = 'Token is invalid or expired';
+        if (e.response?.status === 403) errorMsg = 'Token lacks required permissions (need "repo" scope)';
+        await ctx.reply(`❌ GitHub Error: ${errorMsg}\n\n🔧 Troubleshooting:\n1. Check token at github.com/settings/tokens\n2. Ensure "repo" scope is enabled\n3. Generate a new token if expired`, back('menu_settings')); 
     }
 });
 
 bot.command('vercel', async (ctx) => {
+    console.log('🔧 /vercel command triggered by', ctx.from.id);
     const token = ctx.message.text.replace('/vercel', '').trim();
     if (!token) { 
         await ctx.reply('🔗 Usage: /vercel YOUR_TOKEN\n\nGet token at vercel.com/account/tokens'); 
         return; 
     }
+    const statusMsg = await ctx.reply('⏳ Verifying Vercel token...');
     try {
-        const r = await axios.get('https://api.vercel.com/v2/user', { headers: { Authorization: `Bearer ${token}` }, timeout: 10000 });
+        const r = await axios.get('https://api.vercel.com/v2/user', { 
+            headers: { Authorization: `Bearer ${token}` }, 
+            timeout: 15000 
+        });
         await dbRun('UPDATE users SET vercel_token = ? WHERE user_id = ?', [token, ctx.from.id]);
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
         await ctx.reply(`✅ Vercel connected!\n\n👤 ${r.data.user?.email || 'Connected'}`, back('menu_settings'));
+        console.log(`✅ Vercel connected for user ${ctx.from.id}`);
     } catch (e) { 
-        await ctx.reply(`❌ Invalid token: ${e.message}`, back('menu_settings')); 
+        console.error('Vercel auth error:', e.response?.data || e.message);
+        await ctx.telegram.deleteMessage(ctx.chat.id, statusMsg.message_id).catch(() => {});
+        await ctx.reply(`❌ Vercel Error: ${e.response?.data?.error?.message || e.message}\n\n🔧 Get your token at:\nvercel.com/account/tokens`, back('menu_settings')); 
     }
 });
 
@@ -931,6 +971,22 @@ bot.command('users', async (ctx) => {
 });
 
 // ==================== LAUNCH ====================
-bot.launch().then(() => console.log('✅ TARRIFIC HOST Bot started!')).catch(err => { console.error('❌ Failed:', err); process.exit(1); });
+// Global error handler
+bot.catch((err, ctx) => {
+    console.error(`❌ Bot error for ${ctx.updateType}:`, err);
+    ctx.reply('⚠️ An error occurred. Please try again or use /cancel.').catch(() => {});
+});
+
+bot.launch().then(() => {
+    console.log('✅ TARRIFIC HOST Bot started!');
+    console.log('📊 Environment check:');
+    console.log('  BOT_TOKEN:', BOT_TOKEN ? '✅ Set' : '❌ Missing');
+    console.log('  OWNER_ID:', OWNER_ID ? '✅ Set' : '❌ Missing');
+    console.log('  OWNER_VERCEL_TOKEN:', OWNER_VERCEL_TOKEN ? '✅ Set' : '❌ Not set (owner only)');
+}).catch(err => { 
+    console.error('❌ Failed to start:', err); 
+    process.exit(1); 
+});
+
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
