@@ -988,5 +988,17 @@ bot.launch().then(() => {
     process.exit(1); 
 });
 
+// ==================== PORT FOR RENDER ====================
+// Render needs an open port or it thinks the service failed
+const http = require('http');
+const PORT = process.env.PORT || 3000;
+const server = http.createServer((req, res) => {
+    res.writeHead(200);
+    res.end('🤖 TARRIFIC HOST Bot is running!');
+});
+server.listen(PORT, () => {
+    console.log(`🌐 Port open on ${PORT} for Render health checks`);
+});
+
 process.once('SIGINT', () => bot.stop('SIGINT'));
 process.once('SIGTERM', () => bot.stop('SIGTERM'));
