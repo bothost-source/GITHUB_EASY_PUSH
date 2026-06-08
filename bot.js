@@ -1,8 +1,10 @@
-const { Telegraf, Markup } = require('telegraf');
+const { Telegraf, Markup, session } = require('telegraf');
 const axios = require('axios');
 const sqlite3 = require('sqlite3').verbose();
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const dns = require('dns').promises;
 
 // Config
 const BOT_TOKEN = process.env.BOT_TOKEN;
@@ -23,8 +25,14 @@ if (!OWNER_ID) {
     console.warn('OWNER_ID not set - broadcast and admin features disabled');
 }
 
-// Initialize bot
+// Initialize bot WITH SESSION
 const bot = new Telegraf(BOT_TOKEN);
+bot.use(session());
+
+// Ensure screenshots directory exists
+if (!fs.existsSync('screenshots')) {
+    fs.mkdirSync('screenshots', { recursive: true });
+}
 
 // Initialize SQLite database
 const db = new sqlite3.Database('tarrific_host.db');
@@ -218,6 +226,13 @@ const getCancelButton = () => {
     return Markup.inlineKeyboard([[Markup.button.callback('X Cancel', 'cancel')]]);
 };
 
+const getRetryBackButtons = (retryAction, backAction = 'back_menu') => {
+    return Markup.inlineKeyboard([
+        [Markup.button.callback('O Retry', retryAction)],
+        [Markup.button.callback('< Back', backAction)]
+    ]);
+};
+
 const getMainMenuText = () => {
     return '+-----------------------------+\n' +
            '|  TARRIFIC HOST v1.0         |\n' +
@@ -368,6 +383,7 @@ bot.action('menu_host', async (ctx) => {
 
     const msg = 'HOST NEW SITE\n\nSend me a ZIP file or HTML file to host.\n\nRequirements:\n- ZIP must contain index.html at root\n- Max file size: 25 MB\n- All folders will be preserved\n\nSend your file now or click Cancel:';
     await ctx.editMessageText(msg, getCancelButton());
+    ctx.session = { step: 'host_upload' };
 });
 
 bot.action('menu_sites', async (ctx) => {
@@ -400,6 +416,7 @@ bot.action('menu_vercel', async (ctx) => {
         'DEPLOY TO VERCEL\n\nEnter GitHub repository URL:\nExample: https://github.com/username/repo\n\nOr enter a deployed site URL to screenshot:\nExample: https://username.github.io/repo/\n\nThe bot will:\n1. Deploy to Vercel (if GitHub repo)\n2. Take screenshot of the deployed site\n3. Send you both URLs',
         getCancelButton()
     );
+    ctx.session = { step: 'vercel_deploy' };
 });
 
 bot.action('menu_screenshot', async (ctx) => {
@@ -408,6 +425,7 @@ bot.action('menu_screenshot', async (ctx) => {
         'CAPTURE SCREENSHOT\n\nEnter URL to screenshot:\nExample: https://example.com\n\nOptions:\n- Any website URL\n- GitHub repository page\n- Deployed site URL\n\nThe bot will capture a full-page screenshot.',
         getCancelButton()
     );
+    ctx.session = { step: 'screenshot' };
 });
 
 bot.action('menu_hash', async (ctx) => {
@@ -432,6 +450,7 @@ bot.action('menu_jwt', async (ctx) => {
         'JWT DECODER\n\nPaste your JWT token:\n\nExample:\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
         getCancelButton()
     );
+    ctx.session = { step: 'jwt_decode' };
 });
 
 bot.action('menu_scan', async (ctx) => {
@@ -441,6 +460,7 @@ bot.action('menu_scan', async (ctx) => {
         'PORT SCANNER\n\nEnter target IP or domain:\nExample: example.com or 8.8.8.8\n\nWARNING: Only scan targets you own or have permission to scan!',
         getCancelButton()
     );
+    ctx.session = { step: 'scan_target' };
 });
 
 bot.action('menu_headers', async (ctx) => {
@@ -450,6 +470,7 @@ bot.action('menu_headers', async (ctx) => {
         'HEADER ANALYZER\n\nEnter URL to analyze:\nExample: https://example.com\n\nChecks security headers:\n- HSTS\n- CSP\n- X-Frame-Options\n- X-Content-Type-Options\n- Referrer-Policy',
         getCancelButton()
     );
+    ctx.session = { step: 'headers_url' };
 });
 
 bot.action('menu_whois', async (ctx) => {
@@ -473,6 +494,7 @@ bot.action('menu_breach', async (ctx) => {
         'BREACH CHECKER\n\nEnter email to check:\nExample: user@example.com\n\nChecks Have I Been Pwned database',
         getCancelButton()
     );
+    ctx.session = { step: 'breach_email' };
 });
 
 bot.action('menu_pass', async (ctx) => {
@@ -544,12 +566,36 @@ bot.action('back_menu', async (ctx) => {
     await ctx.editMessageText(getMainMenuText(), getMainMenuKeyboard());
 });
 
+bot.action('back_hash', async (ctx) => {
+    await ctx.answerCbQuery();
+    const keyboard = [
+        [Markup.button.callback('1. Identify Hash', 'hash_identify')],
+        [Markup.button.callback('2. Crack Hash', 'hash_crack')],
+        [Markup.button.callback('3. Generate Hashes', 'hash_generate')],
+        [Markup.button.callback('4. Base64 Encode/Decode', 'hash_base64')],
+        [Markup.button.callback('< Back', 'back_menu')],
+    ];
+    await ctx.editMessageText(getHashMenuText(), Markup.inlineKeyboard(keyboard));
+});
+
+bot.action('back_whois', async (ctx) => {
+    await ctx.answerCbQuery();
+    const keyboard = [
+        [Markup.button.callback('1. WHOIS Lookup', 'whois_lookup')],
+        [Markup.button.callback('2. DNS Records', 'dns_lookup')],
+        [Markup.button.callback('3. Subdomain Finder', 'subdomain_find')],
+        [Markup.button.callback('< Back', 'back_menu')],
+    ];
+    await ctx.editMessageText(getWhoisMenuText(), Markup.inlineKeyboard(keyboard));
+});
+
 bot.action('cancel', async (ctx) => {
     await ctx.answerCbQuery();
+    ctx.session = null;
     await ctx.editMessageText('X Operation cancelled.', getBackButton());
 });
 
-// ============== TEXT MESSAGE HANDLERS ==============
+// ============== HASH SUBMENU HANDLERS ==============
 
 bot.action('hash_identify', async (ctx) => {
     await ctx.answerCbQuery();
@@ -575,6 +621,8 @@ bot.action('hash_base64', async (ctx) => {
     ctx.session = { step: 'hash_base64' };
 });
 
+// ============== WHOIS SUBMENU HANDLERS ==============
+
 bot.action('whois_lookup', async (ctx) => {
     await ctx.answerCbQuery();
     await ctx.editMessageText('Enter domain:\nExample: example.com', getCancelButton());
@@ -593,10 +641,12 @@ bot.action('subdomain_find', async (ctx) => {
     ctx.session = { step: 'subdomain_find' };
 });
 
+// ============== PASSWORD GENERATOR HANDLERS ==============
+
 bot.action(/pass_\d+/, async (ctx) => {
     await ctx.answerCbQuery();
     const length = parseInt(ctx.match[0].split('_')[1]);
-    ctx.session = { step: 'pass_options', length };
+    ctx.session = { step: 'pass_options', length: length, upper: true, lower: true, numbers: true, symbols: true };
 
     const keyboard = [
         [Markup.button.callback('V Uppercase (A-Z)', 'pass_opt_upper')],
@@ -610,8 +660,158 @@ bot.action(/pass_\d+/, async (ctx) => {
     await ctx.editMessageText('OPTIONS (' + length + ' chars)\n\nToggle options then click Generate:', Markup.inlineKeyboard(keyboard));
 });
 
+bot.action('pass_opt_upper', async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    ctx.session.upper = !ctx.session.upper;
+    await ctx.answerCbQuery('Uppercase: ' + (ctx.session.upper ? 'ON' : 'OFF'));
+});
+
+bot.action('pass_opt_lower', async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    ctx.session.lower = !ctx.session.lower;
+    await ctx.answerCbQuery('Lowercase: ' + (ctx.session.lower ? 'ON' : 'OFF'));
+});
+
+bot.action('pass_opt_numbers', async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    ctx.session.numbers = !ctx.session.numbers;
+    await ctx.answerCbQuery('Numbers: ' + (ctx.session.numbers ? 'ON' : 'OFF'));
+});
+
+bot.action('pass_opt_symbols', async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!ctx.session) ctx.session = {};
+    ctx.session.symbols = !ctx.session.symbols;
+    await ctx.answerCbQuery('Symbols: ' + (ctx.session.symbols ? 'ON' : 'OFF'));
+});
+
+bot.action('pass_generate', async (ctx) => {
+    await ctx.answerCbQuery();
+    if (!ctx.session || !ctx.session.length) {
+        await ctx.editMessageText('X Error: No length selected. Please start over.', getBackButton());
+        return;
+    }
+
+    const length = ctx.session.length;
+    let chars = '';
+    if (ctx.session.upper !== false) chars += 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    if (ctx.session.lower !== false) chars += 'abcdefghijklmnopqrstuvwxyz';
+    if (ctx.session.numbers !== false) chars += '0123456789';
+    if (ctx.session.symbols !== false) chars += '!@#$%^&*()_+-=[]{}|;:,.<>?';
+
+    if (!chars) chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+
+    let password = '';
+    for (let i = 0; i < length; i++) {
+        password += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+
+    await ctx.editMessageText(
+        'O PASSWORD GENERATED\n\nLength: ' + length + ' chars\n\n' + password + '\n\nWARNING: This is a cryptographically weak generator. Use for testing only!',
+        Markup.inlineKeyboard([
+            [Markup.button.callback('O Generate Another', 'pass_generate')],
+            [Markup.button.callback('< Back', 'back_menu')]
+        ])
+    );
+});
+
+// ============== COPY & RETRY HANDLERS ==============
+
+bot.action(/copy_id_\d+/, async (ctx) => {
+    await ctx.answerCbQuery('ID copied to clipboard! (Simulated)');
+});
+
+bot.action('copy_url', async (ctx) => {
+    await ctx.answerCbQuery('URL copied! (Simulated)');
+});
+
+bot.action('retry_vercel', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+        'DEPLOY TO VERCEL\n\nEnter GitHub repository URL:\nExample: https://github.com/username/repo',
+        getCancelButton()
+    );
+    ctx.session = { step: 'vercel_deploy' };
+});
+
+bot.action('retry_screenshot', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+        'CAPTURE SCREENSHOT\n\nEnter URL to screenshot:\nExample: https://example.com',
+        getCancelButton()
+    );
+    ctx.session = { step: 'screenshot' };
+});
+
+bot.action('retry_host', async (ctx) => {
+    await ctx.answerCbQuery();
+    const msg = 'HOST NEW SITE\n\nSend me a ZIP file or HTML file to host.\n\nRequirements:\n- ZIP must contain index.html at root\n- Max file size: 25 MB\n- All folders will be preserved\n\nSend your file now or click Cancel:';
+    await ctx.editMessageText(msg, getCancelButton());
+    ctx.session = { step: 'host_upload' };
+});
+
+// ============== DELETE SITE HANDLER ==============
+
+bot.action(/del_/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const repoName = ctx.match.input.replace('del_', '');
+    const userId = ctx.from.id;
+
+    try {
+        await dbRun('DELETE FROM sites WHERE user_id = ? AND repo_name = ?', [userId, repoName]);
+        await ctx.editMessageText('V Deleted ' + repoName, getBackButton('menu_sites'));
+    } catch (e) {
+        await ctx.editMessageText('X Error deleting: ' + e.message, getBackButton());
+    }
+});
+
+// ============== SETTINGS HANDLERS ==============
+
+bot.action('github_connect', async (ctx) => {
+    await ctx.answerCbQuery();
+    await ctx.editMessageText(
+        'GITHUB CONNECTION\n\nTo connect your GitHub account:\n1. Visit: https://github.com/settings/tokens\n2. Generate a Personal Access Token\n3. Send the token to the bot using /github <token>\n\nThe bot needs repo scope to create repositories.',
+        getBackButton('menu_settings')
+    );
+});
+
+bot.action('usage_stats', async (ctx) => {
+    await ctx.answerCbQuery();
+    const userId = ctx.from.id;
+    const totalTools = (await dbAll('SELECT COUNT(*) as count FROM tool_usage WHERE user_id = ?', [userId]))[0].count;
+    const siteCount = (await dbAll('SELECT COUNT(*) as count FROM sites WHERE user_id = ?', [userId]))[0].count;
+
+    const text = 'YOUR USAGE STATS\n\nTools used: ' + totalTools + '\nSites hosted: ' + siteCount + '\n\nKeep using TARRIFIC HOST!';
+    await ctx.editMessageText(text, getBackButton('menu_settings'));
+});
+
+bot.action('clear_data', async (ctx) => {
+    await ctx.answerCbQuery();
+    const userId = ctx.from.id;
+
+    try {
+        await dbRun('DELETE FROM sites WHERE user_id = ?', [userId]);
+        await dbRun('DELETE FROM tool_usage WHERE user_id = ?', [userId]);
+        await dbRun('UPDATE users SET github_token = NULL, github_username = NULL WHERE user_id = ?', [userId]);
+        await ctx.editMessageText('V All your data cleared!\n\nSites, tool history, and GitHub connection removed.', getBackButton('menu_settings'));
+    } catch (e) {
+        await ctx.editMessageText('X Error clearing data: ' + e.message, getBackButton('menu_settings'));
+    }
+});
+
+// ============== TEXT MESSAGE HANDLER ==============
+
 bot.on('text', async (ctx) => {
-    if (!ctx.session || !ctx.session.step) return;
+    // Initialize session if not exists
+    if (!ctx.session) ctx.session = {};
+
+    if (!ctx.session.step) {
+        // No active step - show menu or handle commands
+        return;
+    }
 
     const text = ctx.message.text;
     const step = ctx.session.step;
@@ -619,6 +819,9 @@ bot.on('text', async (ctx) => {
     switch (step) {
         case 'hash_identify':
             await handleHashIdentify(ctx, text);
+            break;
+        case 'hash_crack':
+            await handleHashCrack(ctx, text);
             break;
         case 'hash_generate':
             await handleHashGenerate(ctx, text);
@@ -653,6 +856,11 @@ bot.on('text', async (ctx) => {
         case 'screenshot':
             await handleScreenshot(ctx, text);
             break;
+        case 'host_upload':
+            await ctx.reply('X Please send a ZIP or HTML file, not text. Use the menu to cancel and try again.', getCancelButton());
+            break;
+        default:
+            await ctx.reply('X Unknown step. Please use /cancel and try again.');
     }
 
     ctx.session = null;
@@ -661,7 +869,6 @@ bot.on('text', async (ctx) => {
 // ============== TOOL HANDLERS ==============
 
 async function handleHashIdentify(ctx, text) {
-    const crypto = require('crypto');
     const hashPatterns = {
         'MD5': /^[a-f0-9]{32}$/,
         'SHA-1': /^[a-f0-9]{40}$/,
@@ -684,8 +891,31 @@ async function handleHashIdentify(ctx, text) {
     await ctx.reply(msg, getBackButton('back_hash'));
 }
 
+async function handleHashCrack(ctx, text) {
+    // Simple wordlist attack demo
+    const commonPasswords = ['123456', 'password', '12345678', 'qwerty', '123456789', 'letmein', '1234567', 'football', 'iloveyou', 'admin', 'welcome', 'monkey', 'login', 'abc123', '111111', '123123', 'password123', '1234', 'baseball', 'qwertyuiop'];
+
+    let found = null;
+    for (const pass of commonPasswords) {
+        const testMd5 = crypto.createHash('md5').update(pass).digest('hex');
+        if (testMd5 === text) { found = { type: 'MD5', password: pass }; break; }
+        const testSha1 = crypto.createHash('sha1').update(pass).digest('hex');
+        if (testSha1 === text) { found = { type: 'SHA-1', password: pass }; break; }
+        const testSha256 = crypto.createHash('sha256').update(pass).digest('hex');
+        if (testSha256 === text) { found = { type: 'SHA-256', password: pass }; break; }
+    }
+
+    let msg = '# HASH CRACK RESULT\n\nInput: ' + text + '\nLength: ' + text.length + ' chars\n\n';
+    if (found) {
+        msg += 'V CRACKED!\n\nType: ' + found.type + '\nPassword: ' + found.password + '\n\nWARNING: This was found in a small wordlist. Use strong passwords!';
+    } else {
+        msg += 'X NOT FOUND\n\nTried ' + commonPasswords.length + ' common passwords.\n\nThis hash was not cracked with the built-in wordlist.';
+    }
+
+    await ctx.reply(msg, getBackButton('back_hash'));
+}
+
 async function handleHashGenerate(ctx, text) {
-    const crypto = require('crypto');
     const hashes = {
         'MD5': crypto.createHash('md5').update(text).digest('hex'),
         'SHA-1': crypto.createHash('sha1').update(text).digest('hex'),
@@ -704,7 +934,7 @@ async function handleHashGenerate(ctx, text) {
 async function handleHashBase64(ctx, text) {
     try {
         const decoded = Buffer.from(text, 'base64').toString('utf8');
-        if (decoded && decoded !== text) {
+        if (decoded && decoded !== text && /^[\x20-\x7E\n\r\t]+$/.test(decoded)) {
             const msg = '# BASE64 DECODED\n\nInput: ' + text + '\n\nDecoded:\n' + decoded;
             await ctx.reply(msg, getBackButton('back_hash'));
             return;
@@ -749,23 +979,42 @@ async function handleScanTarget(ctx, text) {
     msg += 'PORT     STATUS   SERVICE\n';
     msg += '-------------------------\n';
 
+    // Try to resolve hostname first
+    let target = text;
+    try {
+        if (!/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(text)) {
+            const addresses = await dns.resolve4(text);
+            if (addresses.length > 0) {
+                target = addresses[0];
+                msg += 'Resolved: ' + text + ' -> ' + target + '\n\n';
+            }
+        }
+    } catch (e) {
+        msg += 'DNS Resolution failed, using original input\n\n';
+    }
+
     for (const port of commonPorts) {
         msg += port.toString().padEnd(8) + ' X Closed  ' + portNames[port] + '\n';
     }
 
-    msg += '\nWARNING: Full port scanning requires more time. This is a quick check.';
+    msg += '\nNOTE: This is a simulated scan. Real port scanning requires raw socket access which is not available in this environment.';
     await ctx.reply(msg, getBackButton());
 }
 
 async function handleHeadersUrl(ctx, text) {
+    let url = text;
+    if (!url.startsWith('http')) {
+        url = 'https://' + url;
+    }
+
     try {
-        const response = await axios.head(text, { timeout: 10000, validateStatus: () => true });
+        const response = await axios.head(url, { timeout: 10000, validateStatus: () => true });
         const headers = response.headers;
 
         const securityHeaders = ['strict-transport-security', 'content-security-policy', 'x-frame-options', 'x-content-type-options', 'referrer-policy'];
 
         let msg = '^ SECURITY REPORT\n\n';
-        msg += 'URL: ' + text + '\n\n';
+        msg += 'URL: ' + url + '\n\n';
 
         msg += 'V PRESENT\n';
         for (const h of securityHeaders) {
@@ -789,24 +1038,37 @@ async function handleHeadersUrl(ctx, text) {
 
 async function handleWhoisLookup(ctx, text) {
     try {
-        const { lookup } = require('whois');
-        const data = await new Promise((resolve, reject) => {
-            lookup(text, (err, data) => {
-                if (err) reject(err);
-                else resolve(data);
-            });
-        });
+        // Use a free WHOIS API (rdap.org)
+        const response = await axios.get('https://rdap.org/domain/' + encodeURIComponent(text), { timeout: 15000 });
+        const data = response.data;
 
         let msg = 'O WHOIS: ' + text + '\n\n';
-        msg += data.substring(0, 1000);
+        if (data.ldhName) msg += 'Domain: ' + data.ldhName + '\n';
+        if (data.status) msg += 'Status: ' + (Array.isArray(data.status) ? data.status.join(', ') : data.status) + '\n';
+        if (data.events) {
+            data.events.forEach(ev => {
+                msg += (ev.eventAction || 'Event') + ': ' + ev.eventDate + '\n';
+            });
+        }
+        if (data.entities) {
+            msg += '\nRegistrant Info:\n';
+            data.entities.forEach(ent => {
+                if (ent.vcardArray && ent.vcardArray[1]) {
+                    ent.vcardArray[1].forEach(prop => {
+                        if (prop[0] === 'fn') msg += '  Name: ' + prop[3] + '\n';
+                        if (prop[0] === 'email') msg += '  Email: ' + prop[3] + '\n';
+                    });
+                }
+            });
+        }
+
         await ctx.reply(msg, getBackButton('back_whois'));
     } catch (e) {
-        await ctx.reply('X WHOIS ERROR\n\n' + e.message, getBackButton('back_whois'));
+        await ctx.reply('X WHOIS ERROR\n\n' + e.message + '\n\nNote: WHOIS lookup requires internet access and valid domain.', getBackButton('back_whois'));
     }
 }
 
 async function handleDnsLookup(ctx, text) {
-    const dns = require('dns').promises;
     try {
         const addresses = await dns.resolve4(text);
         let msg = 'O DNS RECORDS: ' + text + '\n\n';
@@ -814,6 +1076,25 @@ async function handleDnsLookup(ctx, text) {
         addresses.forEach(ip => {
             msg += '  ' + ip + '\n';
         });
+
+        // Try MX records
+        try {
+            const mx = await dns.resolveMx(text);
+            msg += '\nMX Records:\n';
+            mx.forEach(record => {
+                msg += '  ' + record.exchange + ' (priority: ' + record.priority + ')\n';
+            });
+        } catch (e) {}
+
+        // Try TXT records
+        try {
+            const txt = await dns.resolveTxt(text);
+            msg += '\nTXT Records:\n';
+            txt.forEach(record => {
+                msg += '  ' + record.join('') + '\n';
+            });
+        } catch (e) {}
+
         await ctx.reply(msg, getBackButton('back_whois'));
     } catch (e) {
         await ctx.reply('X DNS ERROR\n\n' + e.message, getBackButton('back_whois'));
@@ -821,11 +1102,10 @@ async function handleDnsLookup(ctx, text) {
 }
 
 async function handleSubdomainFind(ctx, text) {
-    const commonSubs = ['www', 'mail', 'ftp', 'admin', 'api', 'blog', 'shop', 'dev', 'test', 'app'];
+    const commonSubs = ['www', 'mail', 'ftp', 'admin', 'api', 'blog', 'shop', 'dev', 'test', 'app', 'cdn', 'm', 'webmail', 'remote', 'server', 'ns1', 'ns2', 'smtp', 'pop', 'imap'];
     let msg = 'O SUBDOMAIN FINDER: ' + text + '\n\n';
     msg += 'Checking common subdomains...\n\n';
 
-    const dns = require('dns').promises;
     const found = [];
 
     for (const sub of commonSubs) {
@@ -846,7 +1126,35 @@ async function handleSubdomainFind(ctx, text) {
 }
 
 async function handleBreachEmail(ctx, text) {
-    await ctx.reply('@ BREACH CHECKER (DEMO)\n\nEmail: ' + text + '\n\nWARNING: No API key configured.\n\nTo use this feature:\n1. Get API key from haveibeenpwned.com\n2. Add it to environment variables\n\nFor now, check manually at:\nhttps://haveibeenpwned.com', getBackButton());
+    try {
+        // Use Have I Been Pwned API (requires API key in real usage, using demo mode here)
+        const response = await axios.get('https://haveibeenpwned.com/api/v3/breachedaccount/' + encodeURIComponent(text), {
+            headers: { 'User-Agent': 'TarrificHostBot/1.0' },
+            timeout: 15000,
+            validateStatus: () => true
+        });
+
+        if (response.status === 404) {
+            await ctx.reply('V GOOD NEWS!\n\nEmail: ' + text + '\n\nNo breaches found. This email has not appeared in any known data breaches.', getBackButton());
+        } else if (response.status === 200) {
+            const breaches = response.data;
+            let msg = 'X BREACHES FOUND!\n\nEmail: ' + text + '\n\nFound in ' + breaches.length + ' breach(es):\n\n';
+            breaches.slice(0, 5).forEach(breach => {
+                msg += '- ' + breach.Name + '\n';
+                if (breach.BreachDate) msg += '  Date: ' + breach.BreachDate + '\n';
+                if (breach.DataClasses) msg += '  Data: ' + breach.DataClasses.join(', ') + '\n';
+                msg += '\n';
+            });
+            msg += '\nChange your password immediately if you still use this email anywhere!';
+            await ctx.reply(msg, getBackButton());
+        } else if (response.status === 429) {
+            await ctx.reply('@ RATE LIMITED\n\nThe Have I Been Pwned API is rate limited.\nPlease try again later.\n\nYou can also check manually at:\nhttps://haveibeenpwned.com', getBackButton());
+        } else {
+            await ctx.reply('@ BREACH CHECKER\n\nEmail: ' + text + '\n\nAPI Response: ' + response.status + '\n\nNote: Full breach checking requires an API key.\nCheck manually at: https://haveibeenpwned.com', getBackButton());
+        }
+    } catch (e) {
+        await ctx.reply('@ BREACH CHECKER (DEMO)\n\nEmail: ' + text + '\n\nAPI Error: ' + e.message + '\n\nTo use this feature fully:\n1. Get API key from haveibeenpwned.com\n2. Add it to environment variables\n\nFor now, check manually at:\nhttps://haveibeenpwned.com', getBackButton());
+    }
 }
 
 async function handleVercelDeploy(ctx, text) {
@@ -872,6 +1180,10 @@ async function handleVercelDeploy(ctx, text) {
             ctx.chat.id, progressMsg.message_id, undefined,
             buildProgress(2, 3, 60, { status: 'in_progress', currentFile: 'Deploying to Vercel...' })
         );
+
+        if (!VERCEL_TOKEN) {
+            throw new Error('VERCEL_TOKEN not configured');
+        }
 
         const response = await axios.post('https://api.vercel.com/v9/projects', {
             name: repo + '-tarrific',
@@ -940,7 +1252,15 @@ async function handleScreenshot(ctx, text) {
     );
 
     try {
-        const { chromium } = require('playwright');
+        // Check if playwright is available
+        let chromium;
+        try {
+            const playwright = require('playwright');
+            chromium = playwright.chromium;
+        } catch (e) {
+            throw new Error('Playwright not installed. Run: npm install playwright');
+        }
+
         const browser = await chromium.launch({ headless: true });
         const browserContext = await browser.newContext({
             viewport: { width: 1920, height: 1080 }
@@ -948,7 +1268,7 @@ async function handleScreenshot(ctx, text) {
         const page = await browserContext.newPage();
 
         await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 });
-        await page.waitForLoadState('networkidle', { timeout: 10000 });
+        await page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
         await new Promise(r => setTimeout(r, 3000));
 
         const screenshotPath = 'screenshots/' + Date.now() + '.png';
@@ -980,6 +1300,9 @@ async function handleScreenshot(ctx, text) {
 // ============== FILE HANDLER ==============
 
 bot.on('document', async (ctx) => {
+    // Initialize session if not exists
+    if (!ctx.session) ctx.session = {};
+
     const doc = ctx.message.document;
     const fileName = doc.file_name;
     const fileSize = doc.file_size;
@@ -1089,6 +1412,153 @@ bot.command('sites', async (ctx) => {
 bot.command('cancel', async (ctx) => {
     ctx.session = null;
     await ctx.reply('X Operation cancelled.', getBackButton());
+});
+
+// ============== NEW COMMANDS (were missing in original) ==============
+
+bot.command('host', async (ctx) => {
+    const userId = ctx.from.id;
+    const user = await dbGet('SELECT github_token, github_username FROM users WHERE user_id = ?', [userId]);
+
+    if (!user || !user.github_token) {
+        await ctx.reply('GitHub connection required!\n\nPlease connect your GitHub account first.\nUse /settings to connect.', getBackButton());
+        return;
+    }
+
+    const sites = await dbAll('SELECT * FROM sites WHERE user_id = ?', [userId]);
+    if (sites.length >= MAX_SITES_PER_USER) {
+        await ctx.reply('Maximum ' + MAX_SITES_PER_USER + ' sites reached!\n\nYou currently have ' + sites.length + ' sites.\nDelete old sites to host new ones.', getBackButton());
+        return;
+    }
+
+    await ctx.reply('HOST NEW SITE\n\nSend me a ZIP file or HTML file to host.\n\nRequirements:\n- ZIP must contain index.html at root\n- Max file size: 25 MB\n- All folders will be preserved\n\nSend your file now or click Cancel:', getCancelButton());
+    ctx.session = { step: 'host_upload' };
+});
+
+bot.command('hash', async (ctx) => {
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'hash_menu']);
+    const keyboard = [
+        [Markup.button.callback('1. Identify Hash', 'hash_identify')],
+        [Markup.button.callback('2. Crack Hash', 'hash_crack')],
+        [Markup.button.callback('3. Generate Hashes', 'hash_generate')],
+        [Markup.button.callback('4. Base64 Encode/Decode', 'hash_base64')],
+        [Markup.button.callback('< Back', 'back_menu')],
+    ];
+    await ctx.reply(getHashMenuText(), Markup.inlineKeyboard(keyboard));
+});
+
+bot.command('jwt', async (ctx) => {
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'jwt_decode']);
+    await ctx.reply('JWT DECODER\n\nPaste your JWT token:\n\nExample:\neyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c', getCancelButton());
+    ctx.session = { step: 'jwt_decode' };
+});
+
+bot.command('scan', async (ctx) => {
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'port_scan']);
+    await ctx.reply('PORT SCANNER\n\nEnter target IP or domain:\nExample: example.com or 8.8.8.8\n\nWARNING: Only scan targets you own or have permission to scan!', getCancelButton());
+    ctx.session = { step: 'scan_target' };
+});
+
+bot.command('headers', async (ctx) => {
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'header_analyzer']);
+    await ctx.reply('HEADER ANALYZER\n\nEnter URL to analyze:\nExample: https://example.com\n\nChecks security headers:\n- HSTS\n- CSP\n- X-Frame-Options\n- X-Content-Type-Options\n- Referrer-Policy', getCancelButton());
+    ctx.session = { step: 'headers_url' };
+});
+
+bot.command('whois', async (ctx) => {
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'whois_menu']);
+    const keyboard = [
+        [Markup.button.callback('1. WHOIS Lookup', 'whois_lookup')],
+        [Markup.button.callback('2. DNS Records', 'dns_lookup')],
+        [Markup.button.callback('3. Subdomain Finder', 'subdomain_find')],
+        [Markup.button.callback('< Back', 'back_menu')],
+    ];
+    await ctx.reply(getWhoisMenuText(), Markup.inlineKeyboard(keyboard));
+});
+
+bot.command('breach', async (ctx) => {
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'breach_check']);
+    await ctx.reply('BREACH CHECKER\n\nEnter email to check:\nExample: user@example.com\n\nChecks Have I Been Pwned database', getCancelButton());
+    ctx.session = { step: 'breach_email' };
+});
+
+bot.command('pass', async (ctx) => {
+    await dbRun('INSERT INTO tool_usage (user_id, tool_name) VALUES (?, ?)', [ctx.from.id, 'password_gen']);
+    const keyboard = [
+        [Markup.button.callback('12 chars', 'pass_12'), Markup.button.callback('16 chars', 'pass_16')],
+        [Markup.button.callback('24 chars', 'pass_24'), Markup.button.callback('32 chars', 'pass_32')],
+        [Markup.button.callback('< Back', 'back_menu')],
+    ];
+    await ctx.reply('PASSWORD GENERATOR\n\nSelect length:', Markup.inlineKeyboard(keyboard));
+});
+
+bot.command('settings', async (ctx) => {
+    const userId = ctx.from.id;
+    const user = await dbGet('SELECT github_token, github_username FROM users WHERE user_id = ?', [userId]);
+    const siteCount = (await dbAll('SELECT * FROM sites WHERE user_id = ?', [userId])).length;
+    const todayTools = (await dbAll("SELECT * FROM tool_usage WHERE user_id = ? AND date(used_at) = date('now')", [userId])).length;
+
+    const githubStatus = user && user.github_token ? '. Connected (' + user.github_username + ')' : 'o Not connected';
+
+    const text = '+-----------------------------+\n' +
+                 '|  SETTINGS                   |\n' +
+                 '|                             |\n' +
+                 '|  GitHub: ' + githubStatus.padEnd(27) + '|\n' +
+                 '|  Sites hosted: ' + siteCount.toString().padEnd(14) + '|\n' +
+                 '|  Tools used today: ' + todayTools.toString().padEnd(12) + '|\n' +
+                 '|                             |\n' +
+                 '|  [O Reconnect GitHub]       |\n' +
+                 '|  [O Usage Stats]            |\n' +
+                 '|  [X Clear All Data]         |\n' +
+                 '|  [< Back to Menu]           |\n' +
+                 '+-----------------------------+';
+
+    const keyboard = [
+        [Markup.button.callback('O Reconnect GitHub', 'github_connect')],
+        [Markup.button.callback('O Usage Stats', 'usage_stats')],
+        [Markup.button.callback('X Clear All Data', 'clear_data')],
+        [Markup.button.callback('< Back', 'back_menu')],
+    ];
+
+    await ctx.reply(text, Markup.inlineKeyboard(keyboard));
+});
+
+bot.command('github', async (ctx) => {
+    const token = ctx.message.text.replace('/github', '').trim();
+    if (!token) {
+        await ctx.reply('GITHUB CONNECTION\n\nUsage: /github <your_personal_access_token>\n\n1. Visit: https://github.com/settings/tokens\n2. Generate a token with "repo" scope\n3. Send it here: /github ghp_xxxxxxxxxxxx');
+        return;
+    }
+
+    try {
+        // Verify token by getting user info
+        const response = await axios.get('https://api.github.com/user', {
+            headers: { Authorization: 'Bearer ' + token },
+            timeout: 10000
+        });
+
+        const username = response.data.login;
+        await dbRun('UPDATE users SET github_token = ?, github_username = ? WHERE user_id = ?', [token, username, ctx.from.id]);
+
+        await ctx.reply('V GitHub Connected!\n\nUsername: ' + username + '\n\nYou can now use hosting features.', getBackButton('menu_settings'));
+    } catch (e) {
+        await ctx.reply('X Invalid GitHub token.\n\nPlease check your token and try again.\n\nError: ' + e.message, getBackButton('menu_settings'));
+    }
+});
+
+bot.command('delete', async (ctx) => {
+    const repoName = ctx.message.text.replace('/delete', '').trim();
+    if (!repoName) {
+        await ctx.reply('Usage: /delete <repo_name>\n\nExample: /delete my-site', getBackButton());
+        return;
+    }
+
+    try {
+        await dbRun('DELETE FROM sites WHERE user_id = ? AND repo_name = ?', [ctx.from.id, repoName]);
+        await ctx.reply('V Deleted ' + repoName, getBackButton('menu_sites'));
+    } catch (e) {
+        await ctx.reply('X Error deleting: ' + e.message, getBackButton());
+    }
 });
 
 // ============== OWNER ONLY COMMANDS ==============
